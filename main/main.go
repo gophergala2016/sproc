@@ -40,7 +40,12 @@ func main() {
 		return
 	}
 
+	fmt.Println("tree:")
 	fmt.Println(tree.Root.Repr(""))
+	fmt.Println("funcs:")
+	for _, def := range tree.Defs {
+		fmt.Println(def.Repr(""))
+	}
 }
 
 //*/

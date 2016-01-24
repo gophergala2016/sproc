@@ -230,7 +230,13 @@ func (bn *ProtoNode) String() string {
 }
 
 func (bn *ProtoNode) Repr(prefix string) string {
-	return ident(prefix, bn.NodeType.String()+" proto block")
+	repr := ident(prefix, bn.NodeType.String()+": "+bn.Name+" ")
+	for _, v := range bn.Vars {
+		repr += fmt.Sprintf("(%s %s) ", v.Name, v.PType)
+	}
+
+	repr += ":> " + bn.RetType
+	return repr
 }
 
 func (bn *ProtoNode) CopyProto() *ProtoNode {
@@ -263,7 +269,10 @@ func (bn *FuncNode) String() string {
 }
 
 func (bn *FuncNode) Repr(prefix string) string {
-	return ident(prefix, bn.NodeType.String()+" func")
+	repr := ident(prefix, bn.NodeType.String()+": ") + "\n"
+	repr += bn.Proto.Repr(prefix+"  ") + "\n"
+	repr += bn.Block.Repr(prefix + "  ")
+	return repr
 }
 
 func (bn *FuncNode) CopyFunc() *FuncNode {
@@ -394,9 +403,12 @@ func (a *ActionNode) tree() *Tree {
 }
 
 func (a *ActionNode) Copy() Node {
-	panic("not implemented!")
-	return a.tr.newAction(a.Pos, a.Line, nil)
+	return a.CopyAction()
+}
 
+func (a *ActionNode) CopyAction() *ActionNode {
+	// FIXME: copy pipes
+	return a.tr.newAction(a.Pos, a.Line, a.Pipes)
 }
 
 // CommandNode holds a command (a pipeline inside an evaluating action).

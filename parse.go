@@ -19,7 +19,7 @@ import (
 type Tree struct {
 	Name      string          // name of the template represented by the tree.
 	ParseName string          // name of the top-level template during parsing, for error messages.
-	Root      *ListNode       // top-level root of the tree.
+	Root      *ActionNode     // top-level root of the tree.
 	Defs      map[string]Node // top-level definitions
 	text      string          // text parsed to create the template (or its parent)
 	// Parsing only; cleared after parse.
@@ -39,7 +39,7 @@ func (t *Tree) Copy() *Tree {
 	return &Tree{
 		Name:      t.Name,
 		ParseName: t.ParseName,
-		Root:      t.Root.CopyList(),
+		Root:      t.Root.CopyAction(),
 		text:      t.text,
 		// FIXME: add defs
 	}
@@ -157,7 +157,7 @@ func (t *Tree) ErrorContext(n Node) (location, context string) {
 // errorf formats the error and terminates processing.
 func (t *Tree) errorf(format string, args ...interface{}) {
 	t.Root = nil
-	format = fmt.Sprintf("template: %s:%d: %s", t.ParseName, t.lex.lineNumber(), format)
+	format = fmt.Sprintf("script: %s:%d: %s", t.ParseName, t.lex.lineNumber(), format)
 	panic(fmt.Errorf(format, args...))
 }
 
@@ -280,29 +280,8 @@ func IsEmptyTree(n Node) bool {
 // parse is the top-level parser for a template, essentially the same
 // as itemList except it also parses {{define}} actions.
 // It runs to EOF.
-func (t *Tree) parseTopLevel() (next Node) {
-	t.Root = t.newList(t.peekNonSpace().pos)
-	for t.peekNonSpace().typ != itemEOF {
-		println("::toplevel loop", t.peek().typ.String())
-		switch {
-		case t.peek().typ > itemDefinition:
-			// parse definition
-			id, def := t.parseDefinition()
-			t.Defs[id] = def
-		default:
-			// parse action
-			t.Root.append(t.action())
-		}
-		/*
-			switch n := t.textOrAction(); n.Type() { // XXX
-			case nodeElse:
-				t.errorf("unexpected %s", n)
-			default:
-				t.Root.append(n)
-			}
-		*/
-	}
-	return nil
+func (t *Tree) parseTopLevel() {
+	t.Root = t.action()
 }
 
 func (t *Tree) parseDefinition() (string, *FuncNode) {
@@ -430,10 +409,21 @@ func (t *Tree) action() (n *ActionNode) {
 			continue
 		}
 
-		println("::action: new pipeline, token:", t.peek().typ.String(), "val:", t.peek().val)
-
-		pipe := t.pipeline("command")
-		pipes = append(pipes, pipe)
+		switch t.peekNonSpace().typ {
+		case itemFunc:
+			// TODO: disallow function definition inside other bodies
+			// define a func
+			println("::action: new definition, token:", t.peek().typ.String(), "val:", t.peek().val)
+			id, funct := t.parseDefinition()
+			t.Defs[id] = funct
+		case itemIdentifier:
+			// parse a pipeline
+			println("::action: new pipeline, token:", t.peek().typ.String(), "val:", t.peek().val)
+			pipe := t.pipeline("command")
+			pipes = append(pipes, pipe)
+		default:
+			println("::action: wtf token:", t.peek().typ.String(), "val:", t.peek().val)
+		}
 
 		for {
 			switch token := t.next().typ; {
