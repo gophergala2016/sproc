@@ -259,6 +259,9 @@ type Function struct {
 	name   string
 	params []*Parameter
 	body   *Block
+
+	isNative bool
+	native   NativeFunc
 }
 
 func newFunction() *Function {
@@ -277,6 +280,12 @@ func (fn *Function) buildProto(proto *ProtoNode) {
 }
 
 func (fn *Function) Invoke(intr *Interpretator, io *IOBase, args []*Value) *Value {
+
+	if fn.isNative {
+		go fn.native(args, io.stdin, io.stdout)
+		return nil
+	}
+
 	block := fn.body.Copy()
 	block.InheritIO(io)
 	bindParams(fn.params, args, block.vars)

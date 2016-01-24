@@ -42,21 +42,28 @@ func (s *Stream) Out() *StreamSlot {
 }
 
 func (s *Stream) shovel() {
-	dsend := (chan *StreamItem)(nil)
-	drecv := s.recvs
+	deadStop := make(chan *StreamItem)
+	dsend := s.sends
+	drecv := deadStop
 
 	var transit *StreamItem
 	for {
+		if transit == nil {
+			drecv = deadStop
+		} else {
+			drecv = s.recvs
+		}
+
 		select {
 		case item := <-dsend:
 			if transit == nil {
 				transit = item
-				dsend = s.sends
+			} else {
+				s.items.PushBack(item)
 			}
 		case drecv <- transit:
 			if s.items.Len() == 0 {
 				transit = nil
-				drecv = nil
 			} else {
 				transit = s.items.Remove(s.items.Front()).(*StreamItem)
 			}
@@ -111,6 +118,10 @@ func NewStreamItem() *StreamItem {
 // or number
 // this value will be printed out
 func (si *StreamItem) FindMainValue() *Value {
+	if si == nil {
+		panic("stream item is nil")
+	}
+
 	vr := si.values.Lookup("")
 	if vr == nil {
 		return nil

@@ -1,6 +1,7 @@
 package sproc
 
 import (
+	"fmt"
 	"os"
 )
 
@@ -19,9 +20,13 @@ func NewInterpretator() *Interpretator {
 }
 
 func (intr *Interpretator) Run(tree *Tree) error {
+	intr.loadBuiltins()
 	b := intr.prepare(tree)
 	intr.openStdStreams()
 	b.UseStreams(intr.GetStream("stdin").Out(), intr.GetStream("stdout").In())
+
+	fmt.Printf(":: about to execute block %#v\n", b)
+
 	return executeBlock(intr, b)
 }
 
@@ -39,11 +44,22 @@ func (intr *Interpretator) prepare(tree *Tree) *Block {
 		buildFunction(intr, name, fnnode)
 	}
 
-	return nil
+	block := buildBlock(intr, tree.Root.Pipes, nil)
+	return block
 }
 
 func (intr *Interpretator) LookupExec(name string) *Function {
 	return intr.funcs[name]
+}
+
+func (intr *Interpretator) AddNativeFunc(nfn NativeFunc, name string, params []*Parameter) {
+	fn := newFunction()
+	fn.isNative = true
+	fn.native = nfn
+	fn.params = params
+	fn.name = name
+
+	intr.funcs[name] = fn
 }
 
 func (intr *Interpretator) AddStream(name string, stream *Stream) {
@@ -59,6 +75,10 @@ func (intr *Interpretator) GetStream(name string) *Stream {
 	stream := NewStream()
 	intr.AddStream(name, stream)
 	return stream
+}
+
+func (intr *Interpretator) loadBuiltins() {
+	intr.AddNativeFunc(NativeCat, "cat", nil)
 }
 
 func (intr *Interpretator) openStdStreams() {
