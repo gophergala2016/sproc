@@ -116,12 +116,25 @@ func (si *StreamItem) FindMainValue() *Value {
 		return nil
 	}
 
-	return &vr.value
+	return vr.value
 }
 
 func (si *StreamItem) AddValue(name string, value *Value) {
-	vr := &Variable{name, *value}
+	vr := &Variable{name, value.Copy()}
 	si.values = AddVar(vr, si.values)
+}
+
+type IOBase struct {
+	stdin, stdout *StreamSlot
+}
+
+func (ib *IOBase) UseStreams(in, out *StreamSlot) {
+	ib.stdin = in
+	ib.stdout = out
+}
+
+func (ib *IOBase) InheritIO(b *IOBase) {
+	*ib = *b
 }
 
 func ReadLinesToStream(reader io.Reader, st *StreamSlot) error {

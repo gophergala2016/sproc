@@ -21,7 +21,8 @@ func NewInterpretator() *Interpretator {
 func (intr *Interpretator) Run(tree *Tree) error {
 	b := intr.prepare(tree)
 	intr.openStdStreams()
-	return intr.executeBlock(b)
+	b.UseStreams(intr.GetStream("stdin").Out(), intr.GetStream("stdout").In())
+	return executeBlock(intr, b)
 }
 
 func (intr *Interpretator) prepare(tree *Tree) *Block {
@@ -70,6 +71,48 @@ func (intr *Interpretator) openStdStreams() {
 	intr.AddStream("stdout", stdout)
 }
 
-func (intr *Interpretator) executeBlock(b *Block) error {
+func executeBlock(intr *Interpretator, block *Block) error {
+	for _, pipe := range block.pipes {
+		// TODO: waitgroup?
+		pipe.InheritIO(&block.IOBase)
+		go executePipe(intr, pipe)
+	}
+
 	return nil
+}
+
+func executePipe(intr *Interpretator, pipe *Pipeline) {
+	if len(pipe.cmds) == 1 {
+		cmd := pipe.cmds[0]
+		cmd.InheritIO(&pipe.IOBase)
+		go executeCommand(intr, cmd, pipe.vars)
+		return
+	}
+
+	var nextInput *StreamSlot = pipe.stdin
+	var currentOutput *StreamSlot
+	var currentInput *StreamSlot
+
+	for idx, cmd := range pipe.cmds {
+		currentInput = nextInput
+
+		if idx == (len(pipe.cmds) - 1) {
+			// last entry writes to pipe out
+			currentOutput = pipe.stdout
+		} else {
+			pipeStream := NewStream()
+			currentOutput = pipeStream.In()
+			nextInput = pipeStream.Out()
+		}
+
+		cmd.UseStreams(currentInput, currentOutput)
+		go executeCommand(intr, cmd, pipe.vars)
+	}
+}
+
+func executeCommand(intr *Interpretator, cmd *Command, vars *VarList) {
+	// first, evaluate arguments. It can take a while (and some input)
+	cmd.evaluateArgs(vars)
+	// then invoke a function
+	cmd.dfunc.Invoke(intr, &cmd.IOBase, cmd.vals)
 }
